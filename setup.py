@@ -20,47 +20,23 @@ class SmartVoting:
         self.D = ['0', '1']     # Possible outcome
         self.agents = agents
 
-    def reset_outcome(self):
-        self.X = {}
-        for agent in self.agents:
-            self.X[agent] = None
-
-    def calculate_output(self):
+    def unravel(self):
         algorithms = ['U', 'DU', 'RU', 'DRU']
+        result = {}
+
         # Calculate result for all of the unravelling procedures
-        # for i, func in enumerate([self.update_u]):
         for i, func in enumerate([self.update_u, self.update_du, self.update_ru, self.update_dru]):
-            self.reset_outcome()
-            all_cycles = set()
+            reset_outcome(self)
             while None in self.X.values():
                 level = 1
                 Y = copy.deepcopy(self.X)
                 while Y == self.X:
-                    for cycle in self.count_cycles(Y, level):
-                        all_cycles.add(tuple(cycle))
                     self.X = func(Y, level)
                     level += 1
 
-            print("number of cycles", len(all_cycles))
-            
-            # print(f"Result {algorithms[i]}:", self.X)
+            result[algorithms[i]] = self.X
 
-    def count_cycles(self, Y, preference_level):
-        linked = {agent : [] for agent in self.agents}
-
-        for i, line in enumerate(self.ballot[preference_level]):
-            for agent in self.agents:
-                if agent in line and Y[agent] is None:
-                    linked[self.agents[i]].append(agent)
-
-        g = nx.DiGraph()
-        g.add_nodes_from(linked.keys())
-        
-        for k, v in linked.items():
-            g.add_edges_from(([(k, t) for t in v]))
-
-        cycles = list(nx.simple_cycles(g))
-        return cycles
+        return result
 
     def update_u(self, Y, level):
         """ 
@@ -204,7 +180,11 @@ class SmartVoting:
             return True, str(delegation)
 
         return False, ""
-       
+
+def reset_outcome(Voting):
+    Voting.X = {}
+    for agent in Voting.agents:
+        Voting.X[agent] = None
 
 def create_ballot(folder, num_agents, preference_level):
     """
