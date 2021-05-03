@@ -61,12 +61,23 @@ def create_data(file, num_agents, preference_level, delegation_bounds=[0,1]):
 
                                 delegation = delegation[:-1] + '),'
                             else: 
-                                # Choose random a single or multiple operator(s)
-                                operator = random.sample(operator, random.choice(range(1, len(operator)+1)))
+                                length = len(candidates)
+                                while candidates != []:
+                                    brackets_candidates = random.sample(candidates, random.choice(range(1, len(candidates)+1)))
+                                    # Choose random a single or multiple operator(s)
+                                    operator = random.sample(operator, random.choice(range(1, len(operator)+1)))
+                                    
+                                    if len(brackets_candidates) != 1 and len(brackets_candidates) != length:
+                                        delegation += '('
 
-                                # Add delegation for delegation profile
-                                for c in candidates:
-                                    delegation += random.choice(['', '~']) + c + random.choice(operator)
+                                    # Add delegation to string
+                                    for c in brackets_candidates:
+                                        delegation += random.choice(['', '~']) + c + random.choice(operator)
+                                        candidates.remove(c)
+
+                                    if len(brackets_candidates) != 1 and len(brackets_candidates) != length:
+                                        delegation = delegation[:-1]
+                                        delegation += ')' + random.choice(operator)
 
                                 delegation = delegation[:-1] + ','
 
@@ -84,7 +95,7 @@ if __name__ == "__main__":
     # State parameters of smart ballot
     preference_level = 4
     num_agents = 5
-    delegation_bound_lower = 0
+    delegation_bound_lower = 0.8
     delegation_bound_upper = 1
     amount_ballots = 10
 
