@@ -116,11 +116,13 @@ class SmartVoting:
         Computes the outcome of an agent at preference level, using a 
         direct delegated vote, majority vote or propositional logic formula.
         """
-        delegation = self.ballot[level][agent].strip()
+        delegation = self.ballot[level][agent]
+
         # Compute the direct delegated vote
         if len(delegation) == 1:
             if Y[delegation] in self.D:
                 return True, Y[delegation] 
+
         # Compute the majority vote
         elif re.findall(r"maj\((.*?)\)", delegation):
             participants = re.findall(r"\((.*?)\)", delegation)[0].split()
@@ -136,6 +138,7 @@ class SmartVoting:
             # Check if most_common is a possible outcome and that it is the strict majority
             if most_common in self.D and count[most_common] > len(participants) /2:
                 return True, most_common
+                
         # Compute the propositional logic formula
         else:
             operations = {'0&1': '0', '1&0': '0','1&1': '1','0&0': '0', '0|1': '1', '1|0': '1','1|1': '1','0|0': '0'}
@@ -145,39 +148,40 @@ class SmartVoting:
                     # Replace all agents in string with its corresponding outcome
                     delegation = delegation.replace(a, Y[a])
 
-            # Delete all spaces from string
-            delegation = delegation.replace(" ", "")
+            delegation = delegation.replace(' ', '')
 
             # Solve all negations in string
             for negation in re.findall('~.', delegation):
                 delegation = delegation.replace(negation, negation[1])
-            
-            # Keep going until there is an outcome
+
+            # Keep going until there is an single correct outcome
             while len(delegation) != 1:
-                # Compute outcome of complete logic formula
-                if delegation[0:3] in operations:
-                    delegation = operations[delegation[0:3]] + delegation[3:]
+                brackets_delegation = copy.deepcopy(delegation)
 
-                elif '0' in delegation[0:3]:
-                    # A logic formula with '0' and '&' always results in '0'
-                    if re.search(r"0&.", delegation[0:3]) or re.search(r".&0", delegation[0:3]):
-                        delegation = '0' + delegation[3:]
-                    # The outcome cannot yet be determined
-                    elif re.search(r"0|.", delegation[0:3]) or re.search(r".|0", delegation[0:3]):
-                        delegation = '?' + delegation[3:]
+                # Check if there are brackets in the formula
+                if re.search(r"\(.*\)", delegation):
+                    # Find most inner brackets
+                    while re.search(r"\(.*\)", brackets_delegation):
+                        brackets_delegation = re.findall(r"\(.*\)", brackets_delegation)[0][1:-1]
 
-                elif '1' in delegation[0:3]:
-                    # A logic formula with '1' and '|' always results in '1'
-                    if re.search(r"1|.", delegation[0:3]) or re.search(r".|1", delegation[0:3]):
-                        delegation = '1' + delegation[3:]
-                    # The outcome cannot yet be determined
-                    elif re.search(r"1&.", delegation[0:3]) or re.search(r".&1", delegation[0:3]):
-                        delegation = '?' + delegation[3:]
+                    updated_delegation = replace_formula(brackets_delegation, operations)
+
+                    if updated_delegation:
+                        delegation = delegation.replace('(' + brackets_delegation + ')', updated_delegation)
+                    else:
+                        # Propositional logic in brackets is not solvable in this preference level
+                        return False, ""
 
                 else:
-                    return False, ""
+                    delegation = replace_formula(delegation, operations)
 
-            return True, str(delegation)
+                    # Propositional logic is not solvable in this preference level
+                    if not delegation:
+                        return False, ""
+
+            # delegation has a correct outcome
+            if delegation != '?':
+                return True, str(delegation)
 
         return False, ""
 
@@ -197,3 +201,29 @@ def create_ballot(folder, num_agents, preference_level):
 
     return dataframe, agents
 
+def replace_formula(delegation, operations):
+    # Compute outcome of complete logic formula
+    while len(delegation) != 1:
+        if delegation[0:3] in operations:
+            delegation = operations[delegation[0:3]] + delegation[3:]
+
+        elif '0' in delegation[0:3]:
+            # A logic formula with '0' and '&' always results in '0'
+            if re.search(r"0&.", delegation[0:3]) or re.search(r".&0", delegation[0:3]):
+                delegation = '0' + delegation[3:]
+            # The outcome cannot yet be determined
+            elif re.search(r"0|.", delegation[0:3]) or re.search(r".|0", delegation[0:3]):
+                delegation = '?' + delegation[3:]
+
+        elif '1' in delegation[0:3]:
+            # A logic formula with '1' and '|' always results in '1'
+            if re.search(r"1|.", delegation[0:3]) or re.search(r".|1", delegation[0:3]):
+                delegation = '1' + delegation[3:]
+            # The outcome cannot yet be determined
+            elif re.search(r"1&.", delegation[0:3]) or re.search(r".&1", delegation[0:3]):
+                delegation = '?' + delegation[3:]
+
+        else:
+            return False
+
+    return delegation
