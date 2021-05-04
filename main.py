@@ -27,6 +27,6 @@ if __name__ == "__main__":
         # Create smart voting model
         Voting = SmartVoting(ballot, agents)
         # Unravel the ballot
-        outcome = Voting.unravel()
+        outcome, number_of_cycles = Voting.unravel()
 
-        print(outcome, "\n")
+        print("Cycles per unravelling procedure", number_of_cycles, "\n")

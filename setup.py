@@ -13,6 +13,7 @@ import re
 from collections import Counter
 import string
 import networkx as nx
+from cycles import find_cycles
 
 class SmartVoting:
     def __init__(self, df, agents):
@@ -23,20 +24,27 @@ class SmartVoting:
     def unravel(self):
         algorithms = ['U', 'DU', 'RU', 'DRU']
         result = {}
+        number_of_cycles = {}
 
         # Calculate result for all of the unravelling procedures
         for i, func in enumerate([self.update_u, self.update_du, self.update_ru, self.update_dru]):
             reset_outcome(self)
+            cycles = set()
+
             while None in self.X.values():
                 level = 1
                 Y = copy.deepcopy(self.X)
                 while Y == self.X:
+                    for cycle in find_cycles(self,  Y, level):
+                        cycles.add(tuple(cycle))
+
                     self.X = func(Y, level)
                     level += 1
 
+            number_of_cycles[algorithms[i]] = len(cycles)
             result[algorithms[i]] = self.X
 
-        return result
+        return result, number_of_cycles
 
     def update_u(self, Y, level):
         """ 
