@@ -13,7 +13,7 @@ import re
 from collections import Counter
 import string
 import networkx as nx
-from cycles import find_cycles
+from cycles import find_cycles, cycle_duplicates
 
 class SmartVoting:
     def __init__(self, df, agents):
@@ -36,7 +36,8 @@ class SmartVoting:
                 Y = copy.deepcopy(self.X)
                 while Y == self.X:
                     for cycle in find_cycles(self,  Y, level):
-                        cycles.add(tuple(cycle))
+                        if not cycle_duplicates(cycles, cycle):
+                            cycles.add(tuple(cycle))
 
                     self.X = func(Y, level)
                     level += 1

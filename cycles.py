@@ -17,4 +17,18 @@ def find_cycles(Voting, Y, preference_level):
 
     cycles = nx.simple_cycles(g)
     
-    return cycles            
+    return cycles    
+
+def cycle_duplicates(cycles, target_cycle):
+    for cycle in cycles:
+        if set(cycle) != set(target_cycle):
+            continue
+            
+        first_letter = target_cycle[0]
+        index = cycle.index(first_letter)
+
+        if (cycle[index:] + cycle[:index]) == tuple(target_cycle):
+            return True
+
+    return False
+        
