@@ -152,8 +152,13 @@ class SmartVoting:
 
             # Solve all negations in string
             for negation in re.findall('~.', delegation):
-                delegation = delegation.replace(negation, negation[1])
-
+                if negation == '~1':
+                    delegation = delegation.replace(negation, '0')
+                elif negation == '~0':
+                    delegation = delegation.replace(negation, '1')
+                else:
+                    delegation = delegation.replace(negation, negation[1])
+                        
             # Keep going until there is an single correct outcome
             while len(delegation) != 1:
                 brackets_delegation = copy.deepcopy(delegation)
