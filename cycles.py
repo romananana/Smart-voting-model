@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 def find_cycles(Voting, Y, preference_level):
     linked = {agent : [] for agent in Voting.agents}
 
-    for i, line in enumerate(Voting.ballot[preference_level]):
+    for i, line in enumerate(Voting.profile[preference_level]):
         for agent in Voting.agents:
             if agent in line and Y[Voting.agents[i]] is None:
                 linked[Voting.agents[i]].append(agent)
