@@ -17,7 +17,7 @@ from cycles import find_cycles, cycle_duplicates
 
 class SmartVoting:
     def __init__(self, df, agents):
-        self.ballot = df       # Delegation ballot
+        self.profile = df       # Delegation profile
         self.D = ['0', '1']     # Possible outcome
         self.agents = agents
 
@@ -53,10 +53,12 @@ class SmartVoting:
         """
         for agent in self.agents:
             if self.X[agent] is None:
-                if self.ballot[level][agent].strip() in self.D:
-                    self.X[agent] = self.ballot[level][agent]
-                elif self.aggregate(Y, level, agent)[0]:
-                    self.X[agent] = self.aggregate(Y, level, agent)[1]
+                if self.profile[level][agent].strip() in self.D:
+                    self.X[agent] = self.profile[level][agent]
+                elif True:
+                    boolean, outcome = self.aggregate(Y, level, agent)
+                    if boolean:
+                        self.X[agent] = outcome
         
         return self.X
 
@@ -67,14 +69,15 @@ class SmartVoting:
         """
         for agent in self.agents:
             if self.X[agent] is None:
-                if self.ballot[level][agent].strip() in self.D:
-                    self.X[agent] = self.ballot[level][agent]
+                if self.profile[level][agent].strip() in self.D:
+                    self.X[agent] = self.profile[level][agent]
         
         if Y == self.X:
             for agent in self.agents:
                 if self.X[agent] is None:
-                    if self.aggregate(Y, level, agent)[0]:
-                        self.X[agent] = self.aggregate(Y, level, agent)[1]
+                    boolean, outcome = self.aggregate(Y, level, agent)
+                    if boolean:
+                        self.X[agent] = outcome
             
         return self.X
 
@@ -86,13 +89,13 @@ class SmartVoting:
         P = set()
         for agent in self.agents:
             if self.X[agent] is None:
-                if self.ballot[level][agent].strip() in self.D or self.aggregate(Y, level, agent)[0]:
+                if self.profile[level][agent].strip() in self.D or self.aggregate(Y, level, agent)[0]:
                     P.add(agent)
         
         if P != set():
             b = random.choice(list(P))
-            if self.ballot[level][b].strip() in self.D:
-                self.X[b] = self.ballot[level][b]
+            if self.profile[level][b].strip() in self.D:
+                self.X[b] = self.profile[level][b]
             else:
                 self.X[b] = self.aggregate(Y, level, b)[1]
             
@@ -106,14 +109,14 @@ class SmartVoting:
         P, Q = set(), set()
         for agent in self.agents:
             if self.X[agent] is None:
-                if self.ballot[level][agent].strip() in self.D:
+                if self.profile[level][agent].strip() in self.D:
                     P.add(agent)
                 elif self.aggregate(Y, level, agent)[0]:
                     Q.add(agent)
         
         if P != set():
             b = random.choice(list(P))
-            self.X[b] = self.ballot[level][b]
+            self.X[b] = self.profile[level][b]
         elif Q != set():
             b = random.choice(list(Q))
             self.X[b] = self.aggregate(Y, level, b)[1]
@@ -125,98 +128,109 @@ class SmartVoting:
         Computes the outcome of an agent at preference level, using a 
         direct delegated vote, majority vote or propositional logic formula.
         """
-        delegation = self.ballot[level][agent]
+        delegation = self.profile[level][agent]
 
         # Compute the direct delegated vote
         if len(delegation) == 1:
             if Y[delegation] in self.D:
                 return True, Y[delegation] 
 
-        # Compute the majority vote
-        elif re.findall(r"maj\((.*?)\)", delegation):
-            participants = re.findall(r"\((.*?)\)", delegation)[0].split()
-            
-            for i, participant in enumerate(participants):
-                if Y[participant] in self.D:
-                    participants[i] = Y[participant]
-
-            # Calculate outcome with most occurences
-            count = Counter(participants)
-            most_common = str(count.most_common(1)[0][0])
-
-            # Check if most_common is a possible outcome and that it is the strict majority
-            if most_common in self.D and count[most_common] > len(participants) /2:
-                return True, most_common
+        # Compute the voting rule
+        elif re.findall(r"rule\((.*?)\)", delegation):
+            boolean, outcome = compute_votingrule(self, Y, delegation)
+            if boolean:
+                return True, outcome
                 
         # Compute the propositional logic formula
         else:
-            operations = {'0&1': '0', '1&0': '0','1&1': '1','0&0': '0', '0|1': '1', '1|0': '1','1|1': '1','0|0': '0'}
-
-            for a in Y:
-                if a in delegation and Y[a] is not None:
-                    # Replace all agents in string with its corresponding outcome
-                    delegation = delegation.replace(a, Y[a])
-
-            delegation = delegation.replace(' ', '')
-
-            # Solve all negations in string
-            for negation in re.findall('~.', delegation):
-                if negation == '~1':
-                    delegation = delegation.replace(negation, '0')
-                elif negation == '~0':
-                    delegation = delegation.replace(negation, '1')
-                else:
-                    delegation = delegation.replace(negation, negation[1])
-                        
-            # Keep going until there is an single correct outcome
-            while len(delegation) != 1:
-                brackets_delegation = copy.deepcopy(delegation)
-
-                # Check if there are brackets in the formula
-                if re.search(r"\(.*\)", delegation):
-                    # Find most inner brackets
-                    while re.search(r"\(.*\)", brackets_delegation):
-                        brackets_delegation = re.findall(r"\(.*\)", brackets_delegation)[0][1:-1]
-
-                    updated_delegation = replace_formula(brackets_delegation, operations)
-
-                    if updated_delegation:
-                        delegation = delegation.replace('(' + brackets_delegation + ')', updated_delegation)
-                    else:
-                        # Propositional logic in brackets is not solvable in this preference level
-                        return False, ""
-
-                else:
-                    delegation = replace_formula(delegation, operations)
-
-                    # Propositional logic is not solvable in this preference level
-                    if not delegation:
-                        return False, ""
-
-            # delegation has a correct outcome
-            if delegation != '?':
-                return True, str(delegation)
+            boolean, outcome = compute_formula(Y, delegation)
+            if boolean:
+                return True, outcome
 
         return False, ""
+
 
 def reset_outcome(Voting):
     Voting.X = {}
     for agent in Voting.agents:
         Voting.X[agent] = None
 
-def create_ballot(folder, num_agents, preference_level):
+def create_profile(folder, num_agents, preference_level):
     """
-    Creates dataframe of smart ballot with the given parameters.
+    Creates dataframe of smart profile with the given parameters.
     """
     agents = list(string.ascii_uppercase)[:num_agents]
-    dataframe = pd.read_csv(folder, names = [i for i in range(1,preference_level+1)], dtype = str)
+    dataframe = pd.read_csv(folder, sep= ', ', names = [i for i in range(1,preference_level+1)], dtype = str, engine='python')
     dataframe.index = agents[:num_agents]
     dataframe = dataframe.fillna('-')
 
     return dataframe, agents
 
+def compute_votingrule(Voting, Y, delegation):
+    participants, percentage = re.findall(r"\((.*?)\)", delegation)[0].split(',')
+    participants = participants.split()
+    percentage = int(percentage[:-1])/100
+
+    for i, participant in enumerate(participants):
+        if Y[participant] in Voting.D:
+            participants[i] = Y[participant]
+
+    # Calculate outcome with most occurences
+    count = Counter(participants)
+    most_common = str(count.most_common(1)[0][0])
+
+    # Check if most_common is a possible outcome and that it is the strict majority
+    if most_common in Voting.D and count[most_common]/len(participants) >= percentage:
+        return True, most_common
+
+    return False, ''
+
+def compute_formula(Y, delegation):
+    operations = {'0&1': '0', '1&0': '0','1&1': '1','0&0': '0', '0|1': '1', '1|0': '1','1|1': '1','0|0': '0'}
+
+    # Replace all agents in string with its corresponding outcome
+    for a in Y:
+        if a in delegation and Y[a] is not None:
+            delegation = delegation.replace(a, Y[a])
+
+    delegation = delegation.replace(' ', '')
+
+    # Solve all negations in string
+    for negation in re.findall('~.', delegation):
+        if negation == '~1':
+            delegation = delegation.replace(negation, '0')
+        elif negation == '~0':
+            delegation = delegation.replace(negation, '1')
+        else:
+            delegation = delegation.replace(negation, negation[1])
+                        
+    # Keep going until there is an single correct outcome
+    while len(delegation) != 1:
+        brackets_delegation = copy.deepcopy(delegation)
+
+        # Check if there are brackets in the formula
+        if re.search(r"\(.*\)", delegation):
+            # Find most inner brackets
+            while re.search(r"\(.*\)", brackets_delegation):
+                brackets_delegation = re.findall(r"\(.*\)", brackets_delegation)[0][1:-1]
+
+            boolean, updated_delegation = replace_formula(brackets_delegation, operations)
+            delegation = delegation.replace('(' + brackets_delegation + ')', updated_delegation)
+
+        else:
+            boolean, delegation = replace_formula(delegation, operations)
+
+        # Propositional logic is not solvable in this preference level
+        if not boolean:
+            return False, ""
+
+    # delegation has a correct outcome
+    if delegation != '?':
+        return True, str(delegation)
+    else:
+        return False, ''
+
 def replace_formula(delegation, operations):
-    # Compute outcome of complete logic formula
     while len(delegation) != 1:
         if delegation[0:3] in operations:
             delegation = operations[delegation[0:3]] + delegation[3:]
@@ -238,6 +252,6 @@ def replace_formula(delegation, operations):
                 delegation = '?' + delegation[3:]
 
         else:
-            return False
+            return False, ''
 
-    return delegation
+    return True, delegation
