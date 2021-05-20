@@ -20,15 +20,12 @@ def find_cycles(Voting, Y, preference_level):
     return cycles    
 
 def cycle_duplicates(cycles, target_cycle):
-    for cycle in cycles:
-        if set(cycle) != set(target_cycle):
-            continue
-            
-        first_letter = target_cycle[0]
-        index = cycle.index(first_letter)
+    first_letter = sorted(target_cycle)[0]
+    index = target_cycle.index(first_letter)
+    target_cycle = target_cycle[index:] + target_cycle[:index]
 
-        if (cycle[index:] + cycle[:index]) == tuple(target_cycle):
-            return True
+    if tuple(target_cycle) in cycles:
+        return True
 
     return False
         
