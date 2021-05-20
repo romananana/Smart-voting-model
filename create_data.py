@@ -44,8 +44,8 @@ def create_data(file, num_agents, preference_level, delegation_bounds=[0,1], per
                     break
                 elif choice[0] == 'delegate':
                     counter = 0
-                    # Agents can try 15 times to make a new delegation
-                    while counter < 15:
+                    # Agents can try 10 times to make a new delegation
+                    while counter < 10:
                         delegation = ''
                         # Agent chooses random subset of agent to whom he wants to delegate
                         candidates = random.sample(possible_agents, random.choice(range(1, len(possible_agents)+1)))
@@ -63,7 +63,7 @@ def create_data(file, num_agents, preference_level, delegation_bounds=[0,1], per
 
                         # Check if the delegation did not already occur in the ballot
                         if delegation not in ballot.split(', '):
-                            if re.search(r"51%", delegation) and ballot != '':
+                            if "51%" in delegation and ballot != '':
                                 if not duplicate_majority(delegation, ballot):
                                     pass
 
@@ -72,8 +72,9 @@ def create_data(file, num_agents, preference_level, delegation_bounds=[0,1], per
 
                         counter += 1
 
-                    if counter == 15:
+                    if counter == 10:
                         ballot += random.choice(outcome) + ', '
+                        break
         
             # Write delegation ballot to file
             new_file.write(ballot[:-2] + "\n")
@@ -120,7 +121,7 @@ def create_formula(delegation, candidates, only_conjunctions = False):
 
         if random.choice([True, False]) and delegation != '':
             break
-    
+
     delegation = to_dnf(delegation[:-3].lower())
     delegation = str(delegation).upper() + ', '
 
