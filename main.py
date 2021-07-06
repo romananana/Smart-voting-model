@@ -25,8 +25,8 @@ if __name__ == "__main__":
         file = f"{i}_{number_of_agents}_{maximal_delegations}_{delegation_bound_lower}_{delegation_bound_upper}.csv"
 
         ########## CHANGE PATH TO DESIRED FOLDER ##########
-        create_data(f"data/{file}", number_of_agents, maximal_delegations, [delegation_bound_lower, delegation_bound_upper], type_of_profile)
-        profile, agents = create_profile(f"data/{file}", number_of_agents, maximal_delegations)
+        create_data(f"{file}", number_of_agents, maximal_delegations, [delegation_bound_lower, delegation_bound_upper], type_of_profile)
+        profile, agents = create_profile(f"{file}", number_of_agents, maximal_delegations)
         ###################################################
         print("Valid smart profile\n", profile)
 
