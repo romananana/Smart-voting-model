@@ -11,36 +11,39 @@ import random
 import numpy as np
 import string
 import copy
-from sympy.logic.boolalg import to_dnf, is_dnf
+from sympy.logic.boolalg import to_dnf
 import re
 from itertools import combinations
 import math
 
-def create_data(file, num_agents, preference_level, delegation_bounds=[0,1], percentage='51%'):
-    agents = list(string.ascii_uppercase)[:num_agents]
+def create_data(file, number_of_agents, maximal_delegations, delegation_bounds, profile):
+    """
+    Creates a valid smart profile according to the parameters.
+    """
+    agents = list(string.ascii_uppercase)[:number_of_agents]
     outcome = ['0', '1']
-    operators = [['&', '|'], 'rule']
+
     lower_bound, upper_bound = delegation_bounds[0], delegation_bounds[1]
 
     with open(file, 'w') as new_file:
-        for i in range(num_agents):
+        for i in range(number_of_agents):
             # Create list with all possible agents to which an agent can delegate
             possible_agents = copy.deepcopy(agents)
             possible_agents.pop(i)
 
             # Get the probability that an agent will delegate his vote
-            prob_delegation = np.random.uniform(low=lower_bound, high=upper_bound, size=None)
+            prob_delegation = np.random.uniform(lower_bound, upper_bound, size=None)
             # Create empty delegation ballot
             ballot = ''
 
-            for j in range(preference_level):
+            for j in range(maximal_delegations):
                 # Agent chooses to delegate  his vote or directly vote with a wieghted uniform distribution
                 choice = random.choices(['delegate', 'direct vote'], weights = [prob_delegation, 1-prob_delegation])
                 
                 # In the last preference level, the agent is obligated to vote directly
-                if choice[0] == 'direct vote' or (j+1) == preference_level or (j+1) == (num_agents - 1):
+                if choice[0] == 'direct vote' or (j+1) == maximal_delegations:
                     ballot += random.choice(outcome) + ', '
-                    # The delegation ballot of an agent is complete when he directly votes
+                    # The delegation ballot of an agent is terminated when one votes directly votes
                     break
                 elif choice[0] == 'delegate':
                     counter = 0
@@ -52,21 +55,38 @@ def create_data(file, num_agents, preference_level, delegation_bounds=[0,1], per
 
                         # Agent wants to delegate to a single agent
                         if len(candidates) == 1:
-                            delegation += candidates[0] + ', '
+                            if profile == 'no negation':
+                                delegation += candidates[0] + ', '
+                            else:
+                                delegation += random.choice(['', '~']) + candidates[0] + ', '
+
                         else:
-                            # Agent chooses to use a majority vote or to use propositional logic
-                            operator = random.choice(operators)
-                            if operator == 'rule':
-                                delegation = create_votingrule(delegation, candidates, percentage)
-                            else: 
-                                delegation = create_formula(delegation, candidates, only_conjunctions=False)
+                            delegation_type = ""
+                            if profile == 'combined':
+                                delegation_type = random.choice(['quota', 'logic'])
+
+                            if profile == 'quota' or delegation_type == 'quota':
+                                delegation = create_quotarule(delegation, candidates, profile)
+                            elif profile == 'logic' or profile == 'no negation' or delegation_type == 'logic': 
+                                delegation = create_formula(delegation, candidates, profile)
 
                         # Check if the delegation did not already occur in the ballot
                         if delegation not in ballot.split(', '):
-                            if "51%" in delegation and ballot != '':
-                                if not duplicate_majority(delegation, ballot):
-                                    pass
+                            if profile == 'combined':
+                                # Check whether the quota rule already exists in the ballot as logical formula
+                                if re.search(r"quota\((.*?)\)", delegation):
+                                    quota_agents, quota = re.findall(r"quota\((.*?)\)", delegation)[0].split(',')
+                                    quota_agents = quota_agents.split()
 
+                                    if len(quota_agents) == int(quota):
+                                        if duplicate_unanimity(delegation, ballot):
+                                            counter += 1
+                                            continue
+                                    else:
+                                        if duplicate_majority(delegation, ballot):
+                                            counter += 1
+                                            continue 
+                            
                             ballot += delegation
                             break
 
@@ -79,17 +99,30 @@ def create_data(file, num_agents, preference_level, delegation_bounds=[0,1], per
             # Write delegation ballot to file
             new_file.write(ballot[:-2] + "\n")
 
-def create_votingrule(delegation, candidates, percentage):
-    delegation += 'rule('
+def create_quotarule(delegation, candidates, profile):
+    """
+    Create quota rule
+    """
+    delegation += 'quota('
     candidates = sorted(candidates)
+
+    if profile == 'combined':
+        quota = math.ceil(len(candidates) * 0.51)
+        quota = random.choice([quota, len(candidates)])
+    else:
+        quota = random.choice(range(1, len(candidates)+1))
+    
     for c in candidates:
         delegation += c + ' '
 
-    return delegation[:-1] + f',{percentage}), '
+    return delegation[:-1] + f',{quota}), '
 
-def create_formula(delegation, candidates, only_conjunctions = False):
-    outside_brackets = []
-    inside_brackets = []
+def create_formula(delegation, candidates, profile):
+    """
+    Create formula of propostional logic
+    """
+    single_character = []
+    outside = []
 
     while len(delegation) <= 20:
         no_spaces = copy.deepcopy(delegation.replace(' ', ''))
@@ -101,23 +134,48 @@ def create_formula(delegation, candidates, only_conjunctions = False):
         else:
             formula_candidates = sorted(random.sample(candidates, random.choice(range(1, len(candidates)+1 ))))
 
-        if len(formula_candidates) != 1:
-            temp_agents = []
-            temp_delegation = ''
-
-            for c in formula_candidates:
-                temp_agents.append(random.choice(['', '~']) + c)
-                temp_delegation += temp_agents[-1] + ' & '
-
-            if temp_agents not in inside_brackets:
-                delegation += '('
-                delegation += temp_delegation[:-3]
-                delegation += ')' + ' | '
+        if profile == 'no negation':
+            negations = ['']
         else:
-            if only_conjunctions == False:
-                if formula_candidates[0] not in outside_brackets:
-                    delegation += random.choice(['', '~']) + formula_candidates[0] + ' | '
-                    outside_brackets.append(formula_candidates[0])
+            negations = ['', '~']
+
+        subformula = ""
+        temp_agents = []
+
+        if len(formula_candidates) != 1:
+            subformula += '('
+            for c in sorted(formula_candidates):
+                if f'~{c}' in single_character:
+                    c = f'~{c}'
+                    subformula +=  c + ' & '
+                elif c in single_character:
+                    subformula +=  c + ' & '
+                else:
+                    c = random.choice(negations) + c
+                    subformula +=  c + ' & '
+
+                    temp_agents.append(c)
+
+            subformula = subformula[:-3] + ')'
+            if subformula not in delegation:
+                delegation += subformula + ' | '
+                for c in temp_agents:
+                    single_character.append(c)
+        else:
+            c = formula_candidates[0]
+
+            if f'~{c}' in single_character:
+                subformula += f"~{c}"
+            elif c in single_character:
+                subformula += c 
+            else:
+                c = random.choice(negations) + c 
+                subformula += c 
+
+            if subformula not in outside:
+                delegation += subformula + ' | '
+                single_character.append(subformula)
+                outside.append(subformula)
 
         if random.choice([True, False]) and delegation != '':
             break
@@ -128,6 +186,12 @@ def create_formula(delegation, candidates, only_conjunctions = False):
     return delegation
 
 def duplicate_majority(delegation, ballot):
+    """
+    Check if quota rule which represents the majority occurs in the ballot
+    as a formula of propositional logic.
+    return: True if it is a duplicate
+            False if it is not a duplicate
+    """
     agents, _ = re.findall(r"\((.*?)\)", delegation)[0].split(',')
     agents = agents.split()
     
@@ -135,7 +199,6 @@ def duplicate_majority(delegation, ballot):
     
     for i, c in enumerate(comb):
         comb[i] = '&'.join(c)
-    
     for delegate in ballot.split(', '):
         brackets = re.findall(r"\((.*?)\)", delegate)
         
@@ -148,17 +211,19 @@ def duplicate_majority(delegation, ballot):
                 
     return False
 
+def duplicate_unanimity(delegation, ballot):
+    """
+    Check if quota rule which represents the unanimity occurs in the ballot
+    as a formula of propositional logic.
+    return: True if it is a duplicate
+            False if it is not a duplicate
+    """
+    agents, _ = re.findall(r"\((.*?)\)", delegation)[0].split(',')
+    agents = agents.split()
+    delegate = ' & '.join(agents) 
 
-if __name__ == "__main__":
-    # State parameters of smart ballot
-    preference_level = 4
-    num_agents = 5
-    delegation_bound_lower = 0
-    delegation_bound_upper = 1
-    amount_ballots = 10
+    if delegate in ballot.split(', '):
+        return True
 
-    for i in range(1, amount_ballots + 1):
-        file = f"{i}_{num_agents}_{preference_level}_{delegation_bound_lower}_{delegation_bound_upper}.csv"
-        
-        # Change path to where you want your data to be
-        create_data(f"data/{file}", num_agents, preference_level, [delegation_bound_lower, delegation_bound_upper])
+    return False
+    
